@@ -108,16 +108,6 @@ Parameters are set in the browser controls or on the command line.
 | DNS mode | Plaintext, encrypted resolver, or model-specific option | Changes whether the query name is visible |
 | Tunnel component | Enables a simulated transport modification | Changes what the inspector can read |
 
-## Publishing the site
-
-The site in `web/` is a static site and can be hosted on GitHub Pages.
-
-1. Push this repository to GitHub.
-2. Open the repository on GitHub and go to **Settings → Pages**.
-3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-4. Push to `main`. The workflow in `.github/workflows/pages.yml` uploads the `web/` folder and deploys it.
-5. The site is available at `https://<owner>.github.io/<repository>/` once the workflow finishes. The **Actions** tab shows its progress.
-
 Notes:
 - The site uses only relative paths, so it works under a repository subpath.
 - To test the same artifact locally, run the `python -m http.server` command from the `web/` folder.
