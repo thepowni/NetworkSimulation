@@ -1,41 +1,41 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ORWOX Network Simulation — COV</title>
+<title>ORWOX Network Simulation</title>
 <style>
-  :root { --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --muted:#8b949e; --accent:#2f81f7; --ok:#3fb950; --bad:#f85149; }
+  :root { --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --muted:#8b949e; --accent:#2f81f7; --ok:#3fb950; --bad:#f85149; --line:#30363d; }
   @media (prefers-color-scheme: light) {
-    :root { --bg:#f6f8fa; --panel:#fff; --ink:#1f2328; --muted:#656d76; --accent:#0969da; --ok:#1a7f37; --bad:#cf222e; }
+    :root { --bg:#f6f8fa; --panel:#fff; --ink:#1f2328; --muted:#656d76; --accent:#0969da; --ok:#1a7f37; --bad:#cf222e; --line:#d0d7de; }
   }
   * { box-sizing: border-box; }
   body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); }
-  header { padding:20px 24px; border-bottom:1px solid var(--muted); }
+  header { padding:20px 24px; border-bottom:1px solid var(--line); }
   header h1 { margin:0; font-size:20px; }
   header p { margin:4px 0 0; color:var(--muted); }
   main { display:grid; grid-template-columns: 320px 1fr; gap:20px; padding:20px 24px; max-width:1200px; margin:auto; }
   @media (max-width: 800px) { main { grid-template-columns:1fr; } }
-  .panel { background:var(--panel); border:1px solid #30363d; border-radius:10px; padding:16px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
   label { display:block; margin:12px 0 4px; font-size:13px; color:var(--muted); }
   input[type=range] { width:100%; }
-  select, input[type=text], input[type=number] { width:100%; padding:6px 8px; background:var(--bg); color:var(--ink); border:1px solid #30363d; border-radius:6px; }
+  select, input[type=text] { width:100%; padding:6px 8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px; }
   .toggle { display:flex; align-items:center; justify-content:space-between; margin:14px 0; font-weight:600; }
   .switch { position:relative; width:52px; height:28px; }
   .switch input { display:none; }
-  .slider { position:absolute; inset:0; background:#30363d; border-radius:28px; cursor:pointer; transition:.2s; }
+  .slider { position:absolute; inset:0; background:var(--line); border-radius:28px; cursor:pointer; transition:.2s; }
   .slider::before { content:""; position:absolute; width:22px; height:22px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
   .switch input:checked + .slider { background:var(--ok); }
   .switch input:checked + .slider::before { transform:translateX(24px); }
   button { width:100%; padding:10px; margin-top:12px; background:var(--accent); color:#fff; border:0; border-radius:6px; font-weight:600; cursor:pointer; }
   .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
-  .stat { background:var(--panel); border:1px solid #30363d; border-radius:10px; padding:12px; text-align:center; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; text-align:center; }
   .stat b { display:block; font-size:24px; }
   .stat span { color:var(--muted); font-size:12px; }
   .timeline { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; max-height:360px; overflow:auto; background:var(--bg); padding:10px; border-radius:6px; white-space:pre; }
   .ok { color:var(--ok); } .bad { color:var(--bad); }
   .flow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0 16px; font-size:13px; }
-  .node { padding:6px 10px; border:1px solid #30363d; border-radius:6px; background:var(--bg); }
+  .node { padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); }
   .node.on { border-color:var(--ok); color:var(--ok); }
   .node.off { opacity:.45; }
   .arrow { color:var(--muted); }
@@ -45,7 +45,7 @@
 <body>
 <header>
   <h1>ORWOX Network Simulation</h1>
-  <p>Sunucu PC → COV → ISP (DPI) → Hedef: paket yolculuğunu ve COV'un etkisini adım adım izleyin.</p>
+  <p>Client host → COV → ISP (DPI) → Server. Follow one HTTPS request step by step and compare outcomes.</p>
 </header>
 
 <main>
@@ -58,62 +58,62 @@
       </label>
     </div>
     <div class="toggle">
-      DPI engelleme
+      DPI inspection
       <label class="switch">
         <input type="checkbox" id="dpi" checked>
         <span class="slider"></span>
       </label>
     </div>
 
-    <label for="domain">Hedef alan adı</label>
+    <label for="domain">Target domain</label>
     <input type="text" id="domain" value="example.com">
 
-    <label for="blocked">Engelli alan adları (virgülle)</label>
+    <label for="blocked">Blocked names (comma-separated)</label>
     <input type="text" id="blocked" value="example.com">
 
-    <label for="latency">Gecikme: <span id="latencyV">35</span> ms</label>
+    <label for="latency">Latency: <span id="latencyV">35</span> ms</label>
     <input type="range" id="latency" min="5" max="300" value="35">
 
-    <label for="loss">Paket kaybı: <span id="lossV">0.2</span>%</label>
+    <label for="loss">Packet loss: <span id="lossV">0.2</span>%</label>
     <input type="range" id="loss" min="0" max="20" step="0.1" value="0.2">
 
-    <label for="frag">COV parça boyutu: <span id="fragV">64</span> bayt</label>
+    <label for="frag">Fragment size: <span id="fragV">64</span> bytes</label>
     <input type="range" id="frag" min="8" max="512" step="8" value="64">
 
-    <label for="dns">DNS modu (COV kapalıysa)</label>
+    <label for="dns">DNS mode (when COV is off)</label>
     <select id="dns">
-      <option value="isp">ISP (düz UDP/53)</option>
-      <option value="public_dot">Genel DoT (TCP/853)</option>
+      <option value="isp">Plaintext DNS (UDP/53)</option>
+      <option value="public_dot">Encrypted DNS (TLS/853)</option>
     </select>
 
-    <label for="action">Engel aksiyonu</label>
+    <label for="action">Inspector action on match</label>
     <select id="action">
-      <option value="rst">RST</option>
-      <option value="drop">DROP</option>
-      <option value="throttle">THROTTLE</option>
+      <option value="rst">Reset (RST)</option>
+      <option value="drop">Drop</option>
+      <option value="throttle">Throttle</option>
     </select>
 
-    <button id="run">Simülasyonu çalıştır</button>
+    <button id="run">Run simulation</button>
   </section>
 
   <section>
     <div class="stats">
-      <div class="stat"><b id="rate">—</b><span>Başarı oranı</span></div>
-      <div class="stat"><b id="ok">—</b><span>Başarılı istek</span></div>
-      <div class="stat"><b id="fail">—</b><span>Engellenen istek</span></div>
+      <div class="stat"><b id="rate">—</b><span>Success rate</span></div>
+      <div class="stat"><b id="ok">—</b><span>Successful requests</span></div>
+      <div class="stat"><b id="fail">—</b><span>Failed requests</span></div>
     </div>
 
     <div class="panel">
-      <strong>Paket yolu</strong>
+      <strong>Packet path</strong>
       <div class="flow" id="flow"></div>
-      <strong>Olay günlüğü</strong>
-      <div class="timeline" id="log">Henüz çalıştırılmadı.</div>
+      <strong>Event log</strong>
+      <div class="timeline" id="log">Not run yet.</div>
     </div>
   </section>
 </main>
 
 <footer>
-  Model amaçlıdır; gerçek ISP veya gerçek COV uygulamasını temsil etmez. Eğitim ve araştırma amaçlıdır.
+  This is a model for education and research. It does not represent a real ISP or a real COV build.
 </footer>
 
 <script src="sim.js"></script>

@@ -1,323 +1,156 @@
 # ORWOX Network Simulation
 
-> Bir sunucu bilgisayarının (PC) internet trafiğinin uçtan uca nasıl işlediğini,
-> DPI (Deep Packet Inspection) engellemelerinin nasıl çalıştığını ve **COV** (ORWOX'un
-> DPI bypass + DNS yapılandırma aracı) bu süreçlerin neresine müdahale ettiğini
-> adım adım gösteren, parametreleri değiştirilebilir bir ağ simülasyonudur.
+An interactive, discrete-event simulation of how a client host communicates with a remote server across a network that performs Deep Packet Inspection (DPI). It models the DNS lookup, TCP handshake and TLS handshake of a single HTTPS request, shows where an inspecting middlebox can observe traffic, and lets you change link, DNS and inspection parameters to see how the outcome changes.
 
-[![Status](https://img.shields.io/badge/status-research-blue)](#)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+It is built for teaching and research on computer networks.
 
----
+- **Live demo:** published with GitHub Pages (see [Publishing the site](#publishing-the-site))
+- **Protocol primer for students:** [docs/PROTOCOLS.md](docs/PROTOCOLS.md)
+- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-## İçindekiler
+## Contents
 
-1. [Amaç](#amaç)
-2. [Kapsam](#kapsam)
-3. [Hızlı Başlangıç](#hızlı-başlangıç)
-4. [Mimari](#mimari)
-5. [Simülasyon Modeli](#simülasyon-modeli)
-6. [Parametreler](#parametreler)
-7. [COV Modülü](#cov-modülü)
-8. [DNS Konfigürasyonu](#dns-konfigürasyonu)
-9. [Algoritmalar](#algoritmalar)
-10. [Doğrulama ve Testler](#doğrulama-ve-testler)
-11. [Sınırlamalar ve Etik Kullanım](#sınırlamalar-ve-etik-kullanım)
-12. [Kaynaklar](#kaynaklar)
+1. [Goals](#goals)
+2. [Scope](#scope)
+3. [Repository layout](#repository-layout)
+4. [Running the simulation](#running-the-simulation)
+5. [Simulation model](#simulation-model)
+6. [Parameters](#parameters)
+7. [Publishing the site](#publishing-the-site)
+8. [Testing](#testing)
+9. [Limitations and responsible use](#limitations-and-responsible-use)
+10. [References](#references)
 
----
+## Goals
 
-## Amaç
+1. Show the layered path of a request: application, transport, network and link layers.
+2. Explain how a passive inspector can make decisions from observable metadata such as DNS query names and the TLS Server Name Indication (SNI).
+3. Demonstrate how encryption and resolver choice change what an observer can see, using measurable outcomes.
 
-Bu proje üç temel soruya cevap vermeyi hedefler:
+## Scope
 
-1. **Bir sunucu PC'nin internet alışverişi (paket gönderme/alma) gerçekte nasıl gerçekleşir?**
-   Katmanlar (OSI / TCP-IP), paketlerin yönlendirilmesi, DNS çözümlemesi ve sağlayıcı (ISP) arasındaki geçişler.
-2. **DPI tabanlı engelleme nasıl çalışır?** Hangi bilgiler (SNI, HTTP Host, TLS parmak izi,
-   DNS sorgusu) incelenir ve hangi kararlar verilir?
-3. **COV bu zincirde nerede devreye girer?** DNS yapılandırması ve paket düzeyinde
-   manipülasyon (fragmentasyon, TLS record bölme vb.) ile hangi kısıtlamalar aşılır ve
-   bunun ağ üzerindeki etkisi nedir?
-
-Simülasyonun her parametresi (gecikme, paket kaybı, DPI kuralları, COV açık/kapalı durumu,
-DNS sağlayıcısı, MTU vb.) ayarlanabilir; sonuçlar grafik ve olay günlüğü olarak izlenebilir.
-
-## Kapsam
-
-| Alan | Kapsanan | Kapsam dışı |
+| Area | Included | Not included |
 |---|---|---|
-| Katmanlar | L2 (Ethernet benzeri), L3 (IP), L4 (TCP/UDP), L7 (HTTP/TLS/DNS) | Fiziksel katman sinyali |
-| Yönlendirme | Basitleştirilmiş yönlendirme tablosu, ISP çıkış düğümü | BGP ölçekli gerçek yönlendirme |
-| DPI | SNI tabanlı, HTTP Host tabanlı, DNS tabanlı, basit imza eşleştirme | Gerçek ticari DPI cihazı davranışı |
-| COV | DNS yapılandırması, paket fragmentasyonu, TLS ClientHello bölme | Gerçek COV uygulamasının kaynak kodu |
-| Ölçüm | Gecikme, kayıp, throughput tahmini, engel oranı | Gerçek internet ölçümü |
+| Layers | Application (DNS, HTTPS), transport (TCP), link-level delay and loss | Physical signalling |
+| Routing | Simplified single path with ISP and server nodes | Internet-scale BGP routing |
+| Inspection | Rule-based matching on DNS names, TLS SNI and HTTP Host | Behaviour of any specific commercial device |
+| Measurements | Latency, loss, success rate, event timeline | Measurements of the real internet |
 
-## Hızlı Başlangıç
-
-```bash
-git clone https://github.com/orwox/orwox-network-simulation.git
-cd orwox-network-simulation
-
-# Engine (Python 3.11+)
-python -m venv .venv && source .venv/bin/activate
-pip install -e ./engine
-
-# Komut satırı simülasyonu
-orwox-sim run --scenario scenarios/basic_dpi.yaml
-
-# Web arayüzü (canlı demo)
-cd web && python -m http.server 8080
-# http://localhost:8080 adresini açın
-```
-
-## Mimari
+## Repository layout
 
 ```
 orwox-network-simulation/
-├── engine/                    # Ana simülasyon motoru (Python)
-│   ├── orwox_sim/
-│   │   ├── core/              # Olay döngüsü, zaman, rastgelelik
-│   │   ├── net/               # Paket, katmanlar, bağlantı, yönlendirme
-│   │   ├── dns/               # DNS sunucusu ve çözümleyici modelleri
-│   │   ├── dpi/               # Inspection motoru, kurallar, aksiyonlar
-│   │   ├── cov/               # COV modülü (bypass + DNS konfigürasyonu)
-│   │   ├── isp/               # Sağlayıcı (ISP) düğümü ve politikalar
-│   │   ├── host/              # Sunucu PC modeli (uygulama, soket, OS yığını)
-│   │   └── metrics/           # Ölçüm, günlük, dışa aktarım
-│   ├── scenarios/             # Hazır senaryolar (YAML)
-│   ├── tests/
-│   └── pyproject.toml
-├── web/                       # Canlı site (statik + JS, engine'i WASM/JSON ile çalıştırır)
-├── docs/                      # Teknik dokümantasyon
+├── engine/          Simulation engine and command-line interface
+├── web/             Browser front end (static files, deployed to GitHub Pages)
+├── docs/            Protocol primer, architecture notes, contribution guide
+├── .github/         Continuous integration and Pages workflows
 └── README.md
 ```
 
-### Bileşenler
+## Running the simulation
 
+Command line (Python 3.11+):
+
+```bash
+cd engine
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+orwox-sim run --dpi on --cov off
+orwox-sim run --dpi on --cov on
 ```
- ┌──────────────┐   paket    ┌──────────┐   paket    ┌────────────┐   paket    ┌──────────┐
- │ Sunucu PC    │ ─────────▶ │ COV      │ ─────────▶ │ ISP (DPI)  │ ─────────▶ │ Hedef    │
- │ (uygulama +  │            │ (opsiyon │            │ inceleme + │            │ sunucu   │
- │  DNS çözücü) │ ◀───────── │  al)     │ ◀───────── │ politika   │ ◀───────── │          │
- └──────────────┘   yanıt    └──────────┘   yanıt    └────────────┘   yanıt    └──────────┘
-        │                                                  ▲
-        └──── DNS sorgusu ──▶ DNS sunucusu (sağlayıcı / özel) ┘
+
+Browser:
+
+```bash
+cd web
+python -m http.server 8080
 ```
 
-## Simülasyon Modeli
+Then open `http://localhost:8080`.
 
-Simülasyon **ayrık olay** (discrete-event) modeline dayanır. Her paket, zaman damgalı
-bir olay olarak kuyruğa alınır; düğümler (host, COV, ISP, DNS, hedef) olayları işler.
+## Simulation model
 
-### Olay döngüsü
+The simulation is a **discrete-event simulation**. Every packet exchange is an event with a timestamp in a priority queue. Nodes consume events and schedule new ones, and the simulated clock jumps from one event to the next.
 
-1. Olay kuyruğu (min-heap, `(t, seq, event)`) boşalana kadar:
-2. En küçük `t` değerli olayı al, simülasyon saatini `t`'ye ilerlet.
-3. Olayın hedef düğümünü çağır; düğüm yeni olaylar üretebilir.
-4. Ölçümleri ve günlüğü güncelle.
+### Event loop
 
-### Paket yaşam döngüsü (bir HTTPS isteği)
+1. Pop the earliest event from the queue and set the simulated clock to its timestamp.
+2. Pass the event to the node it targets.
+3. The node returns zero or more new events, which are pushed onto the queue.
+4. Repeat until the queue is empty or the simulation duration is reached.
 
-| Adım | Düğüm | İşlem |
+### Lifecycle of one HTTPS request
+
+| Step | Node | Action |
 |---|---|---|
-| 1 | Host | Uygulama `example.com` çözümlemesi ister |
-| 2 | Host → DNS | DNS sorgusu (UDP/53 veya DoH/443) |
-| 3 | ISP-DPI | DNS sorgusunu inceler (DNS tabanlı engel kontrolü) |
-| 4 | DNS | `A` kaydı yanıtı döner |
-| 5 | Host | TCP 3-yönlü el sıkışması (SYN, SYN-ACK, ACK) |
-| 6 | Host | TLS ClientHello (SNI = `example.com`) |
-| 7 | COV (açıksa) | ClientHello'yu parçalara böler (fragmentation) |
-| 8 | ISP-DPI | SNI'yı inceler; engelliyse RST veya drop uygular |
-| 9 | Hedef | TLS el sıkışması tamamlanır, veri akar |
+| 1 | Host | Application needs the address of the server name |
+| 2 | Host → resolver | DNS query sent |
+| 3 | Inspector | Observes the DNS query name if it is sent in plaintext |
+| 4 | Resolver → Host | DNS answer returned |
+| 5 | Host ↔ Server | TCP three-way handshake (SYN, SYN-ACK, ACK) |
+| 6 | Host → Server | TLS ClientHello containing the SNI in plaintext |
+| 7 | Inspector | Reads the SNI if it can see it and applies its policy |
+| 8 | Server | TLS handshake completes and application data flows |
 
-## Parametreler
+Each delivery delay is sampled from a normal distribution with a configurable mean and standard deviation. A packet can be dropped with a configurable probability.
 
-Tüm parametreler `scenarios/*.yaml` veya web arayüzündeki kaydırıcılardan değiştirilebilir.
+## Parameters
 
-```yaml
-# scenarios/basic_dpi.yaml
-seed: 42
-duration_ms: 60000
+Parameters are set in the browser controls or on the command line.
 
-link:
-  latency_ms: 35          # tek yön gecikme
-  jitter_ms: 6            # gecikme dalgalanması (normal dağılım, σ)
-  loss_rate: 0.002        # paket kayıp oranı
-  mtu: 1500               # maksimum iletim birimi
-  bandwidth_mbps: 50
-
-dns:
-  resolver: isp           # isp | public_doh | public_dot | custom
-  dnssec: false
-  cache_ttl_s: 300
-
-dpi:
-  enabled: true
-  inspect:
-    dns_qname: true
-    tls_sni: true
-    http_host: true
-  blocklist:
-    - example-blocked.com
-  action_on_match: rst    # rst | drop | redirect | throttle
-  false_positive_rate: 0.0
-
-cov:
-  enabled: true           # ← COV açık/kapalı
-  dns_override:
-    enabled: true
-    provider: custom_doh
-  tls_fragmentation:
-    enabled: true
-    fragment_size: 64     # ClientHello'yu bu boyuta böl
-    fragment_delay_ms: 2
-  http_host_mixcase: false
-
-host:
-  os: linux
-  tcp_initial_cwnd: 10
-  retransmit_max: 5
-```
-
-### Önemli parametreler
-
-| Parametre | Açıklama | Etkisi |
+| Parameter | Meaning | Effect |
 |---|---|---|
-| `link.latency_ms` | Tek yön gecikme | RTT'yi doğrudan etkiler |
-| `link.loss_rate` | Paket kayıp oranı | Yeniden iletim ve throughput'u düşürür |
-| `dpi.action_on_match` | Engel eşleşince aksiyon | RST, drop, throttle farklı hata profilleri üretir |
-| `cov.enabled` | COV aktif mi | Açıkken DPI'nin SNI görme olasılığını düşürür |
-| `cov.tls_fragmentation.fragment_size` | ClientHello parça boyutu | Çok küçük → gecikme artar; çok büyük → etki kalmaz |
-| `dns.resolver` | DNS çözücü seçimi | DNS tabanlı engelin görünürlüğünü belirler |
+| Latency | One-way delay in milliseconds | Increases round-trip time for every step |
+| Loss rate | Probability that a packet is dropped | Causes retransmissions and failures |
+| DPI enabled | Whether the inspector is active | Turns rule matching on or off |
+| Blocked names | Names the inspector matches | Defines the policy |
+| Inspector action | Reset, drop or throttle on a match | Changes the failure signature |
+| DNS mode | Plaintext, encrypted resolver, or model-specific option | Changes whether the query name is visible |
+| Tunnel component | Enables a simulated transport modification | Changes what the inspector can read |
 
-## COV Modülü
+## Publishing the site
 
-**COV**, ORWOX'un DPI bypass ve DNS yapılandırma aracıdır. Simülasyonda iki bağımsız
-alt modülden oluşur ve her biri ayrı ayrı açılıp kapatılabilir:
+The site in `web/` is a static site and can be hosted on GitHub Pages.
 
-### 1. DNS konfigürasyonu (`cov/dns_override.py`)
+1. Push this repository to GitHub.
+2. Open the repository on GitHub and go to **Settings → Pages**.
+3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+4. Push to `main`. The workflow in `.github/workflows/pages.yml` uploads the `web/` folder and deploys it.
+5. The site is available at `https://<owner>.github.io/<repository>/` once the workflow finishes. The **Actions** tab shows its progress.
 
-- Host'un varsayılan DNS sunucusunu ISP'den özel bir çözücüye (DoH/DoT) yönlendirir.
-- Böylece DNS sorgusu ISP-DPI tarafından okunamaz hale gelir (şifreli taşıma).
-- Simülasyonda: `dns.resolver` değeri, DNS paketinin DPI tarafından görülüp görülmeyeceğini belirler.
+Notes:
+- The site uses only relative paths, so it works under a repository subpath.
+- To test the same artifact locally, run the `python -m http.server` command from the `web/` folder.
 
-### 2. Paket manipülasyonu (`cov/fragmenter.py`)
-
-- TLS ClientHello mesajını `fragment_size` baytlık parçalara böler.
-- Her parça ayrı IP/TCP segmenti olarak gönderilir; `fragment_delay_ms` aralıklarla.
-- DPI motoru parçaları yeniden birleştirmeden SNI'yı göremezse, eşleşme yapamaz.
-- Yeniden birleştirme (reassembly) kapasitesi `dpi.reassembly_depth` ile modellenir.
-
-### Açma / kapama davranışı
-
-```
-cov.enabled = false  → Paket doğrudan ISP'ye gider, DNS ISP çözücüsünden geçer
-cov.enabled = true   → DNS override + fragmentasyon uygulanır
-```
-
-Web arayüzünde COV bir **anahtar (toggle)** olarak gösterilir; açılıp kapatıldığında
-aynı senaryo yeniden koşulur ve iki sonuç yan yana karşılaştırılır.
-
-## DNS Konfigürasyonu
-
-Simülasyonda DNS, üç modda çalışır:
-
-| Mod | Taşıma | DPI görünürlüğü | Gecikme |
-|---|---|---|---|
-| `isp` | UDP/53 (düz) | Tam görünür | Düşük |
-| `public_dot` | TCP/853 (TLS) | Sorgu gizli, IP görünür | Orta |
-| `custom_doh` (COV) | HTTPS/443 (HTTP/2) | Sorgu ve IP trafik içinde karışır | Orta-yüksek |
-
-Simülasyon, DNS yanıtının önbellekten (TTL) mi yoksa yeniden sorgudan mı geldiğini izler.
-
-## Algoritmalar
-
-### A1. Olay zamanlayıcı
-
-```
-function run(simulation, until):
-    while queue not empty and queue.peek().time <= until:
-        event = queue.pop()
-        simulation.clock = event.time
-        for new_event in event.node.handle(event):
-            queue.push(new_event)
-        metrics.record(event)
-```
-
-### A2. Gecikme ve kayıp modeli
-
-```
-delay = max(0, normal(μ = latency_ms, σ = jitter_ms))
-if uniform(0,1) < loss_rate:
-    drop packet
-else:
-    schedule delivery at clock + delay
-```
-
-### A3. DPI SNI incelemesi (basitleştirilmiş)
-
-```
-function inspect(packet_stream):
-    buffer = reassemble(packet_stream, depth = reassembly_depth)
-    if buffer is TLS ClientHello:
-        sni = parse_sni(buffer)
-        if sni in blocklist:
-            return action_on_match
-    return ALLOW
-```
-
-### A4. COV ClientHello fragmentasyonu
-
-```
-function fragment(client_hello, size):
-    segments = []
-    for offset in range(0, len(client_hello), size):
-        segments.append(client_hello[offset : offset + size])
-    return segments   # her parça ayrı TCP segmenti olarak, fragment_delay_ms aralıkla gönderilir
-```
-
-Not: Bu algoritma yalnızca **simülasyon modelidir**. DPI'nin hangi durumda parçaları
-birleştirebildiği, `reassembly_depth` parametresiyle soyutlanır.
-
-### A5. DNS önbellek (TTL)
-
-```
-function resolve(qname):
-    if cache.has(qname) and cache[qname].expires > clock:
-        return cache[qname].value      # önbellekten
-    answer = upstream.query(qname)     # ISP veya özel çözücü
-    cache[qname] = (answer, clock + ttl)
-    return answer
-```
-
-## Doğrulama ve Testler
+## Testing
 
 ```bash
 cd engine
 pytest -q
 ```
 
-- **Birim testler**: her katman (paket, gecikme modeli, DPI kuralları, fragmentasyon) için.
-- **Özellik testleri**: `cov.enabled=true` iken SNI engelinin oranı, `false` iken oranından
-  anlamlı şekilde düşük olmalıdır (istatistiksel test, belirli seed ile tekrarlanabilir).
-- **Tekrarlanabilirlik**: aynı `seed` her zaman aynı sonucu üretir.
+- Unit tests cover each component: links, inspector rules, the simulated handshake fields and the event queue.
+- Property tests check that the same seed always produces the same results.
+- Statistical tests check that the loss rate and delay distributions match their parameters.
 
-## Sınırlamalar ve Etik Kullanım
+## Limitations and responsible use
 
-- Bu bir **model**dir; gerçek ISP altyapısı, gerçek DPI cihazları veya gerçek COV
-  uygulamasının kodu içermez.
-- Sonuçlar gerçek internet ölçümlerinin yerine geçmez.
-- Proje **eğitim ve araştırma** amaçlıdır: ağ mühendisliği, sansür tekniklerinin
-  anlaşılması ve savunma (DPI tespiti) geliştirmek için tasarlanmıştır.
-- Gerçek sistemlere karşı kullanım, yasal sınırların ihlali veya başkalarının
-  iletişimine müdahale amacıyla kullanılması yasaktır ve bu projenin kapsamı dışındadır.
+- This is a **model**. It does not reproduce real ISP equipment, real inspection devices or any production software.
+- Results are illustrative and do not replace real network measurements.
+- The project is intended for **education and research**: understanding protocol design, the privacy implications of metadata, and the defensive side of traffic analysis.
+- Do not use this project to interfere with other people's communications or to bypass controls you are not authorised to bypass.
 
-## Kaynaklar
+## References
 
-- RFC 791 (IPv4), RFC 793 (TCP), RFC 8446 (TLS 1.3), RFC 8484 (DNS over HTTPS), RFC 7858 (DNS over TLS)
-- RFC 6066 §3 (TLS Server Name Indication)
-- Kurose & Ross, *Computer Networking: A Top-Down Approach*
+- RFC 791: Internet Protocol (IPv4)
+- RFC 793: Transmission Control Protocol
+- RFC 1035: Domain Names, implementation and specification
+- RFC 6066, section 3: Server Name Indication
+- RFC 8446: The Transport Layer Security (TLS) Protocol, Version 1.3
+- RFC 8484: DNS Queries over HTTPS (DoH)
+- RFC 7858: Specification for DNS over TLS (DoT)
+- Kurose and Ross, *Computer Networking: A Top-Down Approach*
 
 ---
 
-Bu proje [ORWOX](https://orwox.example) ekibi tarafından geliştirilmektedir. Lisans: MIT.
+Maintained by ORWOX. Licensed under the MIT License.
