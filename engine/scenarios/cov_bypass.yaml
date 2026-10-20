@@ -1,0 +1,10 @@
+# Aynı senaryo, COV açık: DNS override + ClientHello fragmentasyonu.
+seed: 42
+requests: 50
+dpi:
+  enabled: true
+  blocklist: [example.com]
+cov:
+  enabled: true
+  fragment_size: 64
+  fragment_delay_ms: 2

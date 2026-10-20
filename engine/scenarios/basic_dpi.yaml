@@ -1,0 +1,12 @@
+# Temel DPI senaryosu: COV kapalı vs açık karşılaştırması için kullanılır.
+seed: 42
+requests: 50
+link:
+  latency_ms: 35
+  loss_rate: 0.002
+dpi:
+  enabled: true
+  blocklist: [example.com]
+  action_on_match: rst
+cov:
+  enabled: false
